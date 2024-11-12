@@ -9,7 +9,7 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 RUN apt update -y && apt install libgdiplus -y
-ENV DOCKER_ENVIRONMENT=Qa
+ENV DOCKER_ENVIRONMENT=Development
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS  build
 ARG NUGET_SRC
