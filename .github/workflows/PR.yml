@@ -1,6 +1,8 @@
 name: Enforce Comment Length
 
 on:
+  pull_request:
+    types: [opened, edited]
   pull_request_review:
     types: [submitted]
   pull_request_review_comment:
