@@ -15,10 +15,29 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Validate Comment Length
+      - name: Validate Pull Request Description and Comments
         uses: actions/github-script@v6
         with:
           script: |
+            // Check PR Description
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+
+            const description = pr.data.body || '';
+            if (description.length < 15) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: "🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.",
+              });
+              throw new Error('Pull Request description is too short.');
+            }
+
+            // Check Review Comments
             const comments = await github.rest.pulls.listReviewComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
