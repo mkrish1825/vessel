@@ -19,14 +19,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Validate Pull Request Description and Review Comment Length
+      - name: Validate PR Description and Comments
         uses: actions/github-script@v6
         with:
           script: |
-            // Import context and github once
-            const { context, github } = require('@actions/github');
+            const { context } = require('@actions/github');
 
-            // Check PR Description only for pull_request event
+            // Fetch PR description
             if (context.eventName === 'pull_request') {
               const pr = await github.rest.pulls.get({
                 owner: context.repo.owner,
@@ -46,7 +45,7 @@ jobs:
               }
             }
 
-            // Check Review Comment for pull_request_review_comment event
+            // Check review comments (only for `pull_request_review_comment` event)
             if (context.eventName === 'pull_request_review_comment') {
               const comment = context.payload.comment.body || '';
               if (comment.length < 15) {
@@ -60,7 +59,7 @@ jobs:
               }
             }
 
-            // Check all Review Comments for pull_request_review event
+            // For pull request reviews, validate all review comments
             if (context.eventName === 'pull_request_review') {
               const comments = await github.rest.pulls.listReviewComments({
                 owner: context.repo.owner,
@@ -69,7 +68,6 @@ jobs:
               });
 
               const shortComments = comments.data.filter(comment => comment.body.length < 15);
-
               if (shortComments.length > 0) {
                 const warningMessage = `
                   🚨 **Attention Required!** 🚨
