@@ -53,7 +53,7 @@ jobs:
             if (shortComments.length > 0) {
               const warningMessage = `
                 🚨 **Attention Required!** 🚨
-                The following comments are too short (less than 15 characters):
+                The following review comments are too short (less than 15 characters):
                 ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
               `;
 
@@ -64,5 +64,5 @@ jobs:
                 body: warningMessage,
               });
 
-              throw new Error('Some comments do not meet the minimum length requirement.');
+              throw new Error('Some review comments do not meet the minimum length requirement.');
             }
