@@ -1,0 +1,44 @@
+name: Enforce Comment Length
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  validate-comments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Validate Comment Length
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { context, github } = require('@actions/github');
+            const comments = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+
+            const shortComments = comments.data.filter(comment => comment.body.length < 15);
+
+            if (shortComments.length > 0) {
+              const warningMessage = `
+                🚨 **Attention Required!** 🚨
+                The following comments are too short (less than 15 characters):
+                ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
+              `;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: warningMessage,
+              });
+
+              throw new Error('Some comments do not meet the minimum length requirement.');
+            }
