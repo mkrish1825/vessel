@@ -23,6 +23,7 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            // Import context and github once
             const { context, github } = require('@actions/github');
 
             // Check PR Description only for pull_request event
