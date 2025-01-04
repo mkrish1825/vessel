@@ -24,7 +24,6 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const core = require('@actions/core');
             let statusMessage = '✅ All validations passed successfully.';
             let validationFailed = false;
 
@@ -117,5 +116,5 @@ jobs:
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
           github-token: ${{ secrets.GIT_TOKEN }}
           ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-          notification-summary: ${{ steps.validation.outputs.statusMessage }}
+          notification-summary: ${{ steps.validation.outputs.statusMessage }} ${{ job.status }}
         if: always()
