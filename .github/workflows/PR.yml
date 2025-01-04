@@ -24,80 +24,91 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            // Initialize status message for Teams notification
-            let statusMessage = 'All validations passed successfully.';
-
-            // Get PR information
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-            });
-            const description = pr.data.body || '';
-            const prCreator = pr.data.user.login;
+            const core = require('@actions/core');
+            let statusMessage = '✅ All validations passed successfully.';
             let validationFailed = false;
 
-            // Check PR Description
-            if (description.length < 15) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: `🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.`,
-              });
-              statusMessage = `❌ PR Description is too short! PR created by: **${prCreator}**`;
-              validationFailed = true;
-            }
-
-            // Check Review Comments
-            if (context.eventName === 'pull_request_review_comment') {
-              const comments = await github.rest.pulls.listReviewComments({
+            try {
+              // Get PR information
+              const pr = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.payload.pull_request.number,
               });
-              const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
+              const description = pr.data.body || '';
+              const prCreator = pr.data.user.login;
 
-              if (shortComments.length > 0) {
-                const shortCommenters = shortComments.map(c => c.user.login).join(', ');
-                const warningMessage = `
-                  🚨 **Attention Required!** 🚨
-                  The following comments are too short (less than 15 characters):
-                  ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
-                `;
+              // Check PR Description
+              if (description.length < 15) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.payload.pull_request.number,
-                  body: warningMessage,
+                  body: `🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.`,
                 });
-
-                statusMessage = `❌ Review comments too short! Commenters: **${shortCommenters}**`;
+                statusMessage = `❌ PR Description is too short! PR created by: **${prCreator}**.`;
                 validationFailed = true;
               }
-            }
 
-            // Check Review Body in Approve or Request Changes
-            if (context.eventName === 'pull_request_review' && context.payload.review) {
-              const reviewBody = context.payload.review.body || '';
-              const reviewer = context.payload.review.user.login;
-              if (reviewBody.length < 15) {
-                await github.rest.issues.createComment({
+              // Check Review Comments
+              if (context.eventName === 'pull_request_review_comment') {
+                const comments = await github.rest.pulls.listReviewComments({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: context.payload.pull_request.number,
-                  body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
+                  pull_number: context.payload.pull_request.number,
                 });
-                statusMessage = `❌ Review body too short! Reviewer: **${reviewer}**`;
-                validationFailed = true;
+                const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
+
+                if (shortComments.length > 0) {
+                  const shortCommenters = shortComments.map(c => c.user.login).join(', ');
+                  const warningMessage = `
+                    🚨 **Attention Required!** 🚨
+                    The following comments are too short (less than 15 characters):
+                    ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
+                  `;
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    body: warningMessage,
+                  });
+
+                  statusMessage = `❌ Review comments too short! Commenters: **${shortCommenters}**.`;
+                  validationFailed = true;
+                }
               }
+
+              // Check Review Body in Approve or Request Changes
+              if (context.eventName === 'pull_request_review' && context.payload.review) {
+                const reviewBody = context.payload.review.body || '';
+                const reviewer = context.payload.review.user.login;
+                if (reviewBody.length < 15) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
+                  });
+                  statusMessage = `❌ Review body too short! Reviewer: **${reviewer}**.`;
+                  validationFailed = true;
+                }
+              }
+            } catch (error) {
+              core.error(error.message);
+              statusMessage = `❌ Validation failed due to an unexpected error: ${error.message}`;
+              validationFailed = true;
             }
 
-            // Return validation status and message
-            return {
-              validationFailed,
-              statusMessage,
-            };
+            // Set the output for subsequent steps
+            core.setOutput('validationFailed', validationFailed);
+            core.setOutput('statusMessage', statusMessage);
+
+            // Fail the job if validation failed
+            if (validationFailed) {
+              core.setFailed(statusMessage);
+            }
+        env:
+            GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
 
       - name: Teams Notification
         uses: jdcargile/ms-teams-notification@v1.3
@@ -106,6 +117,5 @@ jobs:
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
           github-token: ${{ secrets.GIT_TOKEN }}
           ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-          notification-summary: >
-            ${{ steps.validation.outputs.statusMessage }}
+          notification-summary: ${{ steps.validation.outputs.statusMessage }}
         if: always()
