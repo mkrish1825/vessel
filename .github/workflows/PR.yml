@@ -20,24 +20,33 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Validate Pull Request Description and Comments
+        id: validation
         uses: actions/github-script@v6
         with:
           script: |
-            // Check PR Description
+            // Initialize status message for Teams notification
+            let statusMessage = 'All validations passed successfully.';
+
+            // Get PR information
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
             });
             const description = pr.data.body || '';
+            const prCreator = pr.data.user.login;
+            let validationFailed = false;
+
+            // Check PR Description
             if (description.length < 15) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.payload.pull_request.number,
-                body: "🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.",
+                body: `🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.`,
               });
-              throw new Error('Pull Request description is too short.');
+              statusMessage = `❌ PR Description is too short! PR created by: **${prCreator}**`;
+              validationFailed = true;
             }
 
             // Check Review Comments
@@ -50,6 +59,7 @@ jobs:
               const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
 
               if (shortComments.length > 0) {
+                const shortCommenters = shortComments.map(c => c.user.login).join(', ');
                 const warningMessage = `
                   🚨 **Attention Required!** 🚨
                   The following comments are too short (less than 15 characters):
@@ -61,13 +71,16 @@ jobs:
                   issue_number: context.payload.pull_request.number,
                   body: warningMessage,
                 });
-                throw new Error('Some comments do not meet the minimum length requirement.');
+
+                statusMessage = `❌ Review comments too short! Commenters: **${shortCommenters}**`;
+                validationFailed = true;
               }
             }
 
             // Check Review Body in Approve or Request Changes
             if (context.eventName === 'pull_request_review' && context.payload.review) {
               const reviewBody = context.payload.review.body || '';
+              const reviewer = context.payload.review.user.login;
               if (reviewBody.length < 15) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -75,6 +88,24 @@ jobs:
                   issue_number: context.payload.pull_request.number,
                   body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
                 });
-                throw new Error('Review comment is too short.');
+                statusMessage = `❌ Review body too short! Reviewer: **${reviewer}**`;
+                validationFailed = true;
               }
             }
+
+            // Return validation status and message
+            return {
+              validationFailed,
+              statusMessage,
+            };
+
+      - name: Teams Notification
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          status: ${{ steps.validation.outputs.validationFailed == 'true' && 'failure' || 'success' }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          github-token: ${{ secrets.GIT_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
+          notification-summary: >
+            ${{ steps.validation.outputs.statusMessage }}
+        if: always()
