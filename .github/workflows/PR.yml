@@ -122,7 +122,7 @@ jobs:
       - name: Teams Notification
         uses: jdcargile/ms-teams-notification@v1.3
         with:
-          status: ${{ steps.validation.outputs.validationFailed == 'true' && 'failure' || 'success' }}
+          status: ${{ steps.validation.outputs.validationFailed == 'true' ? 'failure' :'success' }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
           github-token: ${{ secrets.GIT_TOKEN }}
           ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
