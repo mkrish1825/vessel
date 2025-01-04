@@ -26,6 +26,7 @@ jobs:
           script: |
             let statusMessage = '✅ All validations passed successfully.';
             let validationFailed = false;
+            const messages = [];
 
             try {
               // Get PR information
@@ -45,8 +46,10 @@ jobs:
                   issue_number: context.payload.pull_request.number,
                   body: `🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.`,
                 });
-                statusMessage = `❌ PR Description is too short! PR created by: **${prCreator}**.`;
+                messages.push(`❌ PR Description too short (by **${prCreator}**).`);
                 validationFailed = true;
+              } else {
+                messages.push(`✅ PR Description: "${description}" (by **${prCreator}**).`);
               }
 
               // Check Review Comments
@@ -63,7 +66,7 @@ jobs:
                   const warningMessage = `
                     🚨 **Attention Required!** 🚨
                     The following comments are too short (less than 15 characters):
-                    ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
+                    ${shortComments.map(c => `- Comment: "${c.body}" by **${c.user.login}**`).join('\n')}
                   `;
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
@@ -72,8 +75,10 @@ jobs:
                     body: warningMessage,
                   });
 
-                  statusMessage = `❌ Review comments too short! Commenters: **${shortCommenters}**.`;
+                  messages.push(`❌ Review comments too short by: **${shortCommenters}**.`);
                   validationFailed = true;
+                } else {
+                  messages.push(`✅ All review comments meet length requirements.`);
                 }
               }
 
@@ -88,17 +93,22 @@ jobs:
                     issue_number: context.payload.pull_request.number,
                     body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
                   });
-                  statusMessage = `❌ Review body too short! Reviewer: **${reviewer}**.`;
+                  messages.push(`❌ Review body too short by: **${reviewer}**.`);
                   validationFailed = true;
+                } else {
+                  messages.push(`✅ Review body by **${reviewer}** meets requirements.`);
                 }
               }
             } catch (error) {
               core.error(error.message);
-              statusMessage = `❌ Validation failed due to an unexpected error: ${error.message}`;
+              messages.push(`❌ Validation failed due to an unexpected error: ${error.message}`);
               validationFailed = true;
             }
 
-            // Set the output for subsequent steps
+            // Combine all messages for Teams notification
+            statusMessage = messages.join('\n');
+
+            // Set outputs for subsequent steps
             core.setOutput('validationFailed', validationFailed);
             core.setOutput('statusMessage', statusMessage);
 
@@ -116,5 +126,7 @@ jobs:
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
           github-token: ${{ secrets.GIT_TOKEN }}
           ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-          notification-summary: ${{ steps.validation.outputs.statusMessage }} ${{ job.status }}
+          notification-summary: |
+            **Validation Summary:**
+            ${{ steps.validation.outputs.statusMessage }}
         if: always()
