@@ -23,13 +23,14 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            const { context, github } = require('@actions/github');
+
             // Check PR Description
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
             });
-
             const description = pr.data.body || '';
             if (description.length < 15) {
               await github.rest.issues.createComment({
@@ -42,27 +43,40 @@ jobs:
             }
 
             // Check Review Comments
-            const comments = await github.rest.pulls.listReviewComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-            });
-
-            const shortComments = comments.data.filter(comment => comment.body.length < 15);
-
-            if (shortComments.length > 0) {
-              const warningMessage = `
-                🚨 **Attention Required!** 🚨
-                The following comments are too short (less than 15 characters):
-                ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
-              `;
-
-              await github.rest.issues.createComment({
+            if (context.eventName === 'pull_request_review_comment') {
+              const comments = await github.rest.pulls.listReviewComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: warningMessage,
+                pull_number: context.payload.pull_request.number,
               });
+              const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
 
-              throw new Error('Some comments do not meet the minimum length requirement.');
+              if (shortComments.length > 0) {
+                const warningMessage = `
+                  🚨 **Attention Required!** 🚨
+                  The following comments are too short (less than 15 characters):
+                  ${shortComments.map(c => `- Comment ID: ${c.id}, Comment: "${c.body}"`).join('\n')}
+                `;
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: warningMessage,
+                });
+                throw new Error('Some comments do not meet the minimum length requirement.');
+              }
+            }
+
+            // Check Review Body in Approve or Request Changes
+            if (context.eventName === 'pull_request_review' && context.payload.review) {
+              const reviewBody = context.payload.review.body || '';
+              if (reviewBody.length < 15) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
+                });
+                throw new Error('Review comment is too short.');
+              }
             }
