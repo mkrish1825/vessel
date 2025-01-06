@@ -27,7 +27,6 @@ jobs:
             let statusMessage = '✅ All validations passed successfully.';
             let validationFailed = false;
             const messages = [];
-
             try {
               // Get PR information
               const pr = await github.rest.pulls.get({
@@ -60,7 +59,6 @@ jobs:
                   pull_number: context.payload.pull_request.number,
                 });
                 const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
-
                 if (shortComments.length > 0) {
                   const shortCommenters = shortComments.map(c => c.user.login).join(', ');
                   const warningMessage = `
@@ -74,7 +72,6 @@ jobs:
                     issue_number: context.payload.pull_request.number,
                     body: warningMessage,
                   });
-
                   messages.push(`❌ Review comments too short by: **${shortCommenters}**.`);
                   validationFailed = true;
                 } else {
@@ -105,9 +102,8 @@ jobs:
               validationFailed = true;
             }
 
-            // Combine all messages for Teams notification
+            // Combine all messages for output
             statusMessage = messages.join('\n');
-
             // Set outputs for subsequent steps
             core.setOutput('validationFailed', validationFailed);
             core.setOutput('statusMessage', statusMessage);
@@ -117,7 +113,7 @@ jobs:
               core.setFailed(statusMessage);
             }
         env:
-            GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
 
       - name: Teams Notification
         uses: jdcargile/ms-teams-notification@v1.3
@@ -128,6 +124,5 @@ jobs:
           ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
           notification-summary: |
             **Validation Summary:**
-            ${{ job.status }},
             ${{ steps.validation.outputs.statusMessage }}
         if: always()
