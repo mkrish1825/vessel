@@ -2,11 +2,26 @@ name: Enforce Comment Length
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, review_requested, synchronize]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
   pull_request_review:
     types: [submitted]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
   pull_request_review_comment:
     types: [created]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
 
 permissions:
   contents: write
@@ -27,7 +42,6 @@ jobs:
             let statusMessage = '✅ All validations passed successfully.';
             let validationFailed = false;
             const messages = [];
-
             try {
               // Get PR information
               const pr = await github.rest.pulls.get({
@@ -37,7 +51,6 @@ jobs:
               });
               const description = pr.data.body || '';
               const prCreator = pr.data.user.login;
-
               // Check PR Description
               if (description.length < 15) {
                 await github.rest.issues.createComment({
@@ -51,7 +64,6 @@ jobs:
               } else {
                 messages.push(`✅ PR Description: "${description}" (by **${prCreator}**).`);
               }
-
               // Check Review Comments
               if (context.eventName === 'pull_request_review_comment') {
                 const comments = await github.rest.pulls.listReviewComments({
@@ -60,7 +72,6 @@ jobs:
                   pull_number: context.payload.pull_request.number,
                 });
                 const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
-
                 if (shortComments.length > 0) {
                   const shortCommenters = shortComments.map(c => c.user.login).join(', ');
                   const warningMessage = `
@@ -74,14 +85,12 @@ jobs:
                     issue_number: context.payload.pull_request.number,
                     body: warningMessage,
                   });
-
                   messages.push(`❌ Review comments too short by: **${shortCommenters}**.`);
                   validationFailed = true;
                 } else {
                   messages.push(`✅ All review comments meet length requirements.`);
                 }
               }
-
               // Check Review Body in Approve or Request Changes
               if (context.eventName === 'pull_request_review' && context.payload.review) {
                 const reviewBody = context.payload.review.body || '';
@@ -104,14 +113,11 @@ jobs:
               messages.push(`❌ Validation failed due to an unexpected error: ${error.message}`);
               validationFailed = true;
             }
-
             // Combine all messages for Teams notification
             statusMessage = messages.join('\n');
-
             // Set outputs for subsequent steps
             core.setOutput('validationFailed', validationFailed);
             core.setOutput('statusMessage', statusMessage);
-
             // Fail the job if validation failed
             if (validationFailed) {
               core.setFailed(statusMessage);
