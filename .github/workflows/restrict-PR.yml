@@ -5,6 +5,14 @@ on:
     branches:
       - master
     types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_target:
+    branches:
+      - master
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
 
 jobs:
   restrict-merge:
@@ -15,22 +23,29 @@ jobs:
         with:
           script: |
             const sourceBranch = context.payload.pull_request.head.ref;
+            const targetBranch = context.payload.pull_request.base.ref;
             const prNumber = context.payload.pull_request.number;
             const repo = context.repo.repo;
             const owner = context.repo.owner;
 
-            console.log(`🔍 Checking source branch: ${sourceBranch}`);
+            console.log(`🔍 Checking PR #${prNumber}: ${sourceBranch} → ${targetBranch}`);
 
-            if (!sourceBranch.startsWith('release/')) {
+            // Only check if the target branch is master
+            if (targetBranch !== "master") {
+              console.log("Not targeting master, skipping check.");
+              return;
+            }
+
+            if (!sourceBranch.startsWith("release/")) {
               const message = `
 ❌ **Merge Blocked!**
-🚫 Merging from branch \`${sourceBranch}\` to \`master\` is **not allowed**.
+🚫 Merging from branch \`${sourceBranch}\` to \`${targetBranch}\` is **not allowed**.
 ✅ Only branches matching the pattern \`release/*\` are permitted to merge into master.
 
 Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from that branch.
 `;
 
-              // Check if a similar comment already exists
+              // Fetch existing comments to avoid duplicates
               const { data: comments } = await github.rest.issues.listComments({
                 owner,
                 repo,
@@ -59,7 +74,7 @@ Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from th
                 });
               }
 
-              core.setFailed(`❌ Merge blocked: ${sourceBranch} → master`);
+              core.setFailed(`❌ Merge blocked: ${sourceBranch} → ${targetBranch}`);
             } else {
-              console.log(`✅ Merge allowed from ${sourceBranch} → master`);
+              console.log(`✅ Merge allowed from ${sourceBranch} → ${targetBranch}`);
             }
