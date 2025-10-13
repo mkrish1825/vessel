@@ -10,19 +10,28 @@ jobs:
   check-source-branch:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate source branch
+      - name: Check source branch and comment if invalid
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Validating source branch for merge to master..."
+          echo "🔍 Validating source branch..."
           SOURCE_BRANCH="${{ github.head_ref }}"
           echo "➡️ Source branch detected: $SOURCE_BRANCH"
 
           if [[ ! "$SOURCE_BRANCH" =~ ^release/ ]]; then
-            echo "❌ ERROR: Merge blocked!"
-            echo "🚫 Merging from branch '$SOURCE_BRANCH' to 'master' is not allowed."
-            echo "✅ Only branches matching the pattern 'release/*' are permitted to merge into master."
-            echo ""
-            echo "Please create a release branch (e.g., release/v1.2.0) and open the PR from that branch."
+            echo "❌ Merge blocked: $SOURCE_BRANCH → master"
+            
+            COMMENT="❌ **Merge Blocked!**
+🚫 Merging from branch \`$SOURCE_BRANCH\` to \`master\` is **not allowed**.
+✅ Only branches matching the pattern \`release/*\` are permitted to merge into master.
+
+Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from that branch."
+
+            # Post comment on PR
+            gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+              -f body="$COMMENT"
+
             exit 1
           fi
 
-          echo "✅ Validation passed: '$SOURCE_BRANCH' is allowed to merge into master."
+          echo "✅ Merge allowed: $SOURCE_BRANCH → master"
