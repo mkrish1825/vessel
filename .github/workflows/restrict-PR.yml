@@ -1,10 +1,6 @@
 name: Restrict Merge to Master
 
 on:
-  pull_request:
-    branches:
-      - master
-    types: [opened, reopened, synchronize, ready_for_review]
   pull_request_target:
     branches:
       - master
@@ -30,7 +26,6 @@ jobs:
 
             console.log(`🔍 Checking PR #${prNumber}: ${sourceBranch} → ${targetBranch}`);
 
-            // Only check if the target branch is master
             if (targetBranch !== "master") {
               console.log("Not targeting master, skipping check.");
               return;
@@ -45,7 +40,6 @@ jobs:
 Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from that branch.
 `;
 
-              // Fetch existing comments to avoid duplicates
               const { data: comments } = await github.rest.issues.listComments({
                 owner,
                 repo,
@@ -57,7 +51,6 @@ Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from th
               );
 
               if (existing) {
-                console.log("🔁 Updating existing PR comment...");
                 await github.rest.issues.updateComment({
                   owner,
                   repo,
@@ -65,7 +58,6 @@ Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from th
                   body: message,
                 });
               } else {
-                console.log("💬 Creating new PR comment...");
                 await github.rest.issues.createComment({
                   owner,
                   repo,
