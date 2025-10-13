@@ -1,41 +1,44 @@
-name: Restrict Merge to Master
+name: Restrict Non-Release Branch Merges to Master
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - master
     types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
-  pull-requests: write   # needed to post a comment
+  pull-requests: write
+  contents: read
 
 jobs:
   restrict-merge:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if source branch is allowed
-        id: branch_check
+      - name: Validate Source Branch
+        id: check_branch
         run: |
-          echo "Source branch: ${{ github.head_ref }}"
-          if [[ ! "${{ github.head_ref }}" =~ ^release/ ]]; then
+          echo "Source branch: ${{ github.event.pull_request.head.ref }}"
+          if [[ ! "${{ github.event.pull_request.head.ref }}" =~ ^release/ ]]; then
             echo "not_allowed=true" >> $GITHUB_OUTPUT
           else
             echo "not_allowed=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Comment on PR if restricted
-        if: steps.branch_check.outputs.not_allowed == 'true'
+        if: steps.check_branch.outputs.not_allowed == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            const branch = context.payload.pull_request.head.ref;
+            const message = `🚫 **Merge Blocked!**
+Merging from branch **${branch}** to **master** is not allowed.
+Only branches following the pattern **release/** can be merged into master.`;
+
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚫 Merge Blocked!
+              issue_number: context.issue.number,
+              body: message
+            });
 
-Merging from branch **${context.payload.pull_request.head.ref}** to **master** is **not allowed**.
-
-Only branches following the pattern **release/** are permitted to merge into master.`
-            })
-            core.setFailed("Merges from non-release branches are not allowed.")
+            core.setFailed("Merges from non-release branches are not allowed.");
