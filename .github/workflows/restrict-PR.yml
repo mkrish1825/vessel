@@ -1,21 +1,21 @@
-name: Restrict Merge to Master
+
+name: Restrict merges
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - master
-    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   pull-requests: write
   contents: read
 
 jobs:
-  restrict-merge:
+  check-branch:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate source branch and comment on PR
-        uses: actions/github-script@v6
+      - name: Check source branch and comment if invalid
+        uses: actions/github-script@v7
         with:
           script: |
             const sourceBranch = context.payload.pull_request.head.ref;
@@ -24,49 +24,23 @@ jobs:
             const repo = context.repo.repo;
             const owner = context.repo.owner;
 
-            console.log(`🔍 Checking PR #${prNumber}: ${sourceBranch} → ${targetBranch}`);
+            console.log(`Checking PR from ${sourceBranch} → ${targetBranch}`);
 
-            if (targetBranch !== "master") {
-              console.log("Not targeting master, skipping check.");
-              return;
-            }
-
-            if (!sourceBranch.startsWith("release/")) {
+            if (targetBranch === "master" && !sourceBranch.startsWith("release/")) {
               const message = `
 ❌ **Merge Blocked!**
-🚫 Merging from branch \`${sourceBranch}\` to \`${targetBranch}\` is **not allowed**.
-✅ Only branches matching the pattern \`release/*\` are permitted to merge into master.
-
-Please create a release branch (e.g. \`release/v1.2.0\`) and open the PR from that branch.
+You can only merge branches starting with \`release/\` into master.
+Current branch: \`${sourceBranch}\`
 `;
 
-              const { data: comments } = await github.rest.issues.listComments({
+              await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: prNumber,
+                body: message
               });
 
-              const existing = comments.find(c =>
-                c.user.type === "Bot" && c.body.includes("Merge Blocked!")
-              );
-
-              if (existing) {
-                await github.rest.issues.updateComment({
-                  owner,
-                  repo,
-                  comment_id: existing.id,
-                  body: message,
-                });
-              } else {
-                await github.rest.issues.createComment({
-                  owner,
-                  repo,
-                  issue_number: prNumber,
-                  body: message,
-                });
-              }
-
-              core.setFailed(`❌ Merge blocked: ${sourceBranch} → ${targetBranch}`);
+              core.setFailed(`❌ Merge blocked from ${sourceBranch} → ${targetBranch}`);
             } else {
-              console.log(`✅ Merge allowed from ${sourceBranch} → ${targetBranch}`);
+              console.log(`✅ Merge allowed: ${sourceBranch} → ${targetBranch}`);
             }
