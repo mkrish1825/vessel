@@ -13,11 +13,7 @@ permissions:
 jobs:
   restrict-merge:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Validate source branch
         uses: actions/github-script@v7
         with:
@@ -32,11 +28,7 @@ jobs:
             console.log(`Checking PR: ${sourceBranch} → ${targetBranch}`);
 
             if (targetBranch === "master" && !sourceBranch.startsWith("release/")) {
-              const message = `
-❌ **Merge Blocked!**
-You can only merge branches starting with \`release/\` into master.
-Current branch: \`${sourceBranch}\`
-`;
+              const message = "❌ **Merge Blocked!**\nYou can only merge branches starting with `release/` into master.\nCurrent branch: `" + sourceBranch + "`";
 
               await github.rest.issues.createComment({
                 owner,
@@ -45,7 +37,6 @@ Current branch: \`${sourceBranch}\`
                 body: message
               });
 
-              // Throwing an error makes the job fail and shows a failing check in the PR
               throw new Error(`❌ Merge blocked from ${sourceBranch} → ${targetBranch}`);
             } else {
               console.log(`✅ Merge allowed: ${sourceBranch} → ${targetBranch}`);
