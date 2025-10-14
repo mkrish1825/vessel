@@ -1,51 +1,24 @@
+#fdaudgs
 name: Restrict merges to master
-
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
-    branches:
-      - master
+      branches:
+          - master
 
-permissions:
-  pull-requests: write
-  contents: read
+
 
 jobs:
-  restrict-merge:
-    runs-on: ubuntu-latest
+  check-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if source branch is a release branch
+        run: |
+          echo "Source branch: ${{ github.head_ref }}"
+          if [[ ! "${{ github.head_ref }}" =~ ^release/ ]]; then
+            echo "❌ Only release/* branches can merge into master."
+            exit 1
+          fi"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Validate source branch
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const sourceBranch = context.payload.pull_request.head.ref;
-            const targetBranch = context.payload.pull_request.base.ref;
-            const prNumber = context.payload.pull_request.number;
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
 
-            console.log(`Checking PR: ${sourceBranch} → ${targetBranch}`);
-
-            if (targetBranch === "master" && !sourceBranch.startsWith("release/")) {
-              const message = `
-❌ **Merge Blocked!**
-You can only merge branches starting with \`release/\` into master.
-Current branch: \`${sourceBranch}\`
-`;
-
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: prNumber,
-                body: message
-              });
-
-              core.setFailed(`❌ Merge blocked from ${sourceBranch} → ${targetBranch}`);
-            } else {
-              console.log(`✅ Merge allowed: ${sourceBranch} → ${targetBranch}`);
-            }
+​
