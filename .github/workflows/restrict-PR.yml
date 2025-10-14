@@ -1,8 +1,8 @@
-
-name: Restrict merges
+name: Restrict merges to master
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     branches:
       - master
 
@@ -11,20 +11,25 @@ permissions:
   contents: read
 
 jobs:
-  check-branch:
+  restrict-merge:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check source branch and comment if invalid
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate source branch
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const sourceBranch = context.payload.pull_request.head.ref;
             const targetBranch = context.payload.pull_request.base.ref;
             const prNumber = context.payload.pull_request.number;
-            const repo = context.repo.repo;
             const owner = context.repo.owner;
+            const repo = context.repo.repo;
 
-            console.log(`Checking PR from ${sourceBranch} → ${targetBranch}`);
+            console.log(`Checking PR: ${sourceBranch} → ${targetBranch}`);
 
             if (targetBranch === "master" && !sourceBranch.startsWith("release/")) {
               const message = `
