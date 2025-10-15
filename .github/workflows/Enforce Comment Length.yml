@@ -1,0 +1,139 @@
+name: Enforce Comment Length
+
+on:
+  pull_request:
+    types: [opened, edited, review_requested, synchronize]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
+  pull_request_review:
+    types: [submitted]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
+  pull_request_review_comment:
+    types: [created]
+    branches:
+      - develop
+      - qa
+      - staging
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-comments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Validate Pull Request Description and Comments
+        id: validation
+        uses: actions/github-script@v6
+        with:
+          script: |
+            let statusMessage = '✅ All validations passed successfully.';
+            let validationFailed = false;
+            const messages = [];
+            try {
+              // Get PR information
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+              });
+              const description = pr.data.body || '';
+              const prCreator = pr.data.user.login;
+              // Check PR Description
+              if (description.length < 15) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: `🚨 **Pull Request Description too short!** Please add a meaningful description with at least 15 characters.`,
+                });
+                messages.push(`❌ PR Description too short (by **${prCreator}**).`);
+                validationFailed = true;
+              } else {
+                messages.push(`✅ PR Description: "${description}" (by **${prCreator}**).`);
+              }
+              // Check Review Comments
+              if (context.eventName === 'pull_request_review_comment') {
+                const comments = await github.rest.pulls.listReviewComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                });
+                const shortComments = comments.data.filter(comment => comment.body && comment.body.length < 15);
+                if (shortComments.length > 0) {
+                  const shortCommenters = shortComments.map(c => c.user.login).join(', ');
+                  const warningMessage = `
+                    🚨 **Attention Required!** 🚨
+                    The following comments are too short (less than 15 characters):
+                    ${shortComments.map(c => `- Comment: "${c.body}" by **${c.user.login}**`).join('\n')}
+                  `;
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    body: warningMessage,
+                  });
+                  messages.push(`❌ Review comments too short by: **${shortCommenters}**.`);
+                  validationFailed = true;
+                } else {
+                  messages.push(`✅ All review comments meet length requirements.`);
+                }
+              }
+              // Check Review Body in Approve or Request Changes
+              if (context.eventName === 'pull_request_review' && context.payload.review) {
+                const reviewBody = context.payload.review.body || '';
+                const reviewer = context.payload.review.user.login;
+                if (reviewBody.length < 15) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    body: `🚨 **Review comment too short!** Please add a meaningful comment with at least 15 characters.`,
+                  });
+                  messages.push(`❌ Review body too short by: **${reviewer}**.`);
+                  validationFailed = true;
+                } else {
+                  messages.push(`✅ Review body by **${reviewer}** meets requirements.`);
+                }
+              }
+            } catch (error) {
+              core.error(error.message);
+              messages.push(`❌ Validation failed due to an unexpected error: ${error.message}`);
+              validationFailed = true;
+            }
+            // Combine all messages for Teams notification
+            statusMessage = messages.join('\n');
+            // Set outputs for subsequent steps
+            core.setOutput('validationFailed', validationFailed);
+            core.setOutput('statusMessage', statusMessage);
+            // Fail the job if validation failed
+            if (validationFailed) {
+              core.setFailed(statusMessage);
+            }
+        env:
+            GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+
+      - name: Teams Notification
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          status: ${{ steps.validation.outputs.validationFailed == 'true' && 'failure' || 'success' }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          github-token: ${{ secrets.GIT_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
+          notification-summary: |
+            **Validation Summary:**
+            ${{ job.status }},
+            ${{ steps.validation.outputs.statusMessage }}
+        if: always()
