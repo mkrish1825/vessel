@@ -1,0 +1,43 @@
+name: Restrict merges to master
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches:
+      - master
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  restrict-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sourceBranch = context.payload.pull_request.head.ref;
+            const targetBranch = context.payload.pull_request.base.ref;
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            console.log(`Checking PR: ${sourceBranch} → ${targetBranch}`);
+
+            if (targetBranch === "master" && !sourceBranch.startsWith("release/")) {
+              const message = "❌ **Merge Blocked!**\nYou can only merge branches starting with `release/` into master.\nCurrent branch: `" + sourceBranch + "`";
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: message
+              });
+
+              throw new Error(`❌ Merge blocked from ${sourceBranch} → ${targetBranch}`);
+            } else {
+              console.log(`✅ Merge allowed: ${sourceBranch} → ${targetBranch}`);
+            }
